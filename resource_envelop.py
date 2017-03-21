@@ -3,9 +3,9 @@ import igraph
 class SimpleTemporalProblemInstance:
 
 	def __init__(self):
-		self.nodes = dict()
+		self.nodes = {"x0":0}
 		self.g = igraph.Graph(directed=True, edge_attrs={"weight": 1})
-		self.g.add_vertex()
+		self.g.add_vertex("x0")
 		self._shortest_paths = None
 		self._modified = True
 
@@ -19,7 +19,7 @@ class SimpleTemporalProblemInstance:
 				self.g.vs[vid][key] = value
 			return name
 
-	def add_constraint(self, event0, event1, up_bound=None, lower_bound=None):
+	def add_constraint(self, event0, event1, lower_bound=None, up_bound=None):
 		if up_bound != None:
 			self._modified = True
 			self.g.add_edge(event0, event1, weight=up_bound)
@@ -50,7 +50,7 @@ class ResourceEnvelopSolver:
 	def __init__(self, stp):
 		self.stp = stp
 
-	def _build_bipartite_graph(stp):
+	def _build_bipartite_graph(self, stp):
 		g = igraph.Graph(directed=True, edge_attrs={"weight": 1})
 		g.add_vertex()
 		source = g.vs[0]
@@ -63,10 +63,10 @@ class ResourceEnvelopSolver:
 			v = g.vs[i]
 			if v["production"] > 0:
 				g.add_edge(source, v, capacity=abs(v["production"]))
-				producers.add(v)
+				producers.add(stp.g.vs[i-1])
 			elif v["production"] < 0:
 				g.add_edge(v, target, capacity=abs(v["production"]))
-				consumers.add(v)
+				consumers.add(stp.g.vs[i-1])
 
 		for p in producers:
 			for c in consumers:
@@ -75,40 +75,40 @@ class ResourceEnvelopSolver:
 
 		return g, producers, consumers
 
-	def _create_timeline(stp):
+	def _create_timeline(self,stp):
 		timeline = list(enumerate(stp.shortest_paths()[0]))
 		timeline.sort(key=lambda tup: tup[1])
 		return timeline[1:]
 
 	def solve(self):
-		g, producers, consumers = _build_bipartite_graph(self.stp)
+		g, producers, consumers = self._build_bipartite_graph(self.stp)
 		vertices = consumers
-
+		vertices.add(g.vs[0])
+		vertices.add(g.vs[1])
 		max_production = list()
 
-		for vid, t in _create_timeline(self.stp):
+		for vid, t in self._create_timeline(self.stp):
 			#Remove Nodes
-			if self.stp.vs[vid]["production"] < 0:
-				vertices.remove(vid)
-			elif self.stp.vs[vid]["production"] > 0:
-				vertices.add(vid)
-
+			if self.stp.g.vs[vid]["production"] < 0:
+				vertices.remove(self.stp.g.vs[vid])
+			elif self.stp.g.vs[vid]["production"] > 0:
+				vertices.add(self.stp.g.vs[vid])
 			g_temp = g.subgraph(list(vertices))
 			source = g_temp.vs[0]
 			target = g_temp.vs[1]
 
-			mf = g_temp.maxflow(0, 1).value
+			mf = g_temp.maxflow(0, 1)
 
 			# max_indenpendent_set = set()
 			max_production_t = 0
 
 			for p in source.successors():
-				eid = g_temp.get_eid(s, p)
+				eid = g_temp.get_eid(source, p)
 				if p["production"] == mf.flow[eid]:
 					# max_indenpendent_set.add(p)
 					max_production_t += p["production"]
 			for c in target.predecessors():
-				eid = g_temp.get_eid(s, c)
+				eid = g_temp.get_eid(c, target)
 				if c["production"] != mf.flow[eid]:
 					# max_indenpendent_set.add(c)
 					max_production_t += c["production"]
@@ -118,7 +118,24 @@ class ResourceEnvelopSolver:
 		return max_production
 			
 
+if __name__ == '__main__':
+	stp = SimpleTemporalProblemInstance()
+	x1 = stp.add_node("x1", production=5)
+	x2 = stp.add_node("x2", production=-5)
+	x3 = stp.add_node("x3", production=15)
 
+	stp.add_constraint(stp.g.vs[0], x1, 5, 10)
+	stp.add_constraint(stp.g.vs[0], x3, 30, 30)
+	stp.add_constraint(x1, x2, 20, 20)
+	stp.add_constraint(x2, x3, 5, 10)
+
+	r = ResourceEnvelopSolver(stp)
+	print r.solve()
+	
+
+
+
+	
 
 
 
