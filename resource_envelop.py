@@ -52,9 +52,9 @@ class ResourceEnvelopSolver:
 
 	def _build_bipartite_graph(self, stp):
 		g = igraph.Graph(directed=True, edge_attrs={"weight": 1})
-		g.add_vertex()
+		g.add_vertex("source")
 		source = g.vs[0]
-		g.add_vertex()
+		g.add_vertex("target")
 		target = g.vs[1]
 		producers = set()
 		consumers = set()
@@ -88,7 +88,6 @@ class ResourceEnvelopSolver:
 		max_production = list()
 
 		for vid, t in self._create_timeline(self.stp):
-			#Remove Nodes
 			if self.stp.g.vs[vid]["production"] < 0:
 				vertices.remove(self.stp.g.vs[vid])
 			elif self.stp.g.vs[vid]["production"] > 0:
