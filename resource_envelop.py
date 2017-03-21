@@ -103,12 +103,12 @@ class ResourceEnvelopSolver:
 
 			for p in source.successors():
 				eid = g_temp.get_eid(source, p)
-				if p["production"] == mf.flow[eid]:
+				if p["production"] != mf.flow[eid]:
 					# max_indenpendent_set.add(p)
 					max_production_t += p["production"]
 			for c in target.predecessors():
 				eid = g_temp.get_eid(c, target)
-				if c["production"] != mf.flow[eid]:
+				if c["production"] == mf.flow[eid]:
 					# max_indenpendent_set.add(c)
 					max_production_t += c["production"]
 
