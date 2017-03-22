@@ -14,6 +14,7 @@ class SimpleTemporalProblemInstance:
 
 		#All nodes in this graph in dict: {node name: node id}
 		self.nodes = dict(x0=0)
+		self.x0 = x0
 		self.g = igraph.Graph(directed=True, edge_attrs={"weight": 1})
 		#Add x null
 		self.g.add_vertex(x0)
@@ -147,16 +148,23 @@ class ResourceEnvelopSolver:
 		@param stp: the L{SimpleTemporalProblemInstance} object that specifies the simple temporal problem.
 		"""
 
-		timeline = list(enumerate(stp.shortest_paths()[0]))
-		timeline.sort(key=lambda tup: tup[1])
+		timeline = [None for i in xrange(1, len(stp.g.vs))]
+		for i in xrange(1, len(stp.g.vs)):
+			v = stp.g.vs[i]
+			if v["production"] > 0:
+				timeline[i-1] = (-stp.shortest_path_pair(v["name"], stp.x0), i)
+			elif v["production"] < 0:
+				timeline[i-1] = (stp.shortest_path_pair(stp.x0, v["name"]), i)
+				
+		timeline.sort(key=lambda tup: tup[0])
 		last_t = None
 		vid_list = []
-		for t in timeline[1:]:
-			if last_t is not None and t[1] != last_t:
+		for t in timeline:
+			if last_t is not None and t[0] != last_t:
 				yield (last_t, vid_list)
 				vid_list = []
-			vid_list.append(t[0])
-			last_t = t[1]
+			vid_list.append(t[1])
+			last_t = t[0]
 
 		if last_t is not None:
 			yield (last_t, vid_list)
@@ -215,6 +223,7 @@ def test1():
 	stp.add_constraint(x3, x4, 2, 2)
 
 	r = ResourceEnvelopSolver(stp)
+	print(r.solve())
 	print("Test1: {}".format(r.solve() == [(5.0, 5), (25.0, 0), (30.0, 15), (32.0, 17)]))
 
 def test2():
@@ -231,7 +240,8 @@ def test2():
 	stp.add_constraint(x3, x4, 5, 11)
 
 	r = ResourceEnvelopSolver(stp)
-	print("Test2: {}".format(r.solve() == [(10.0, 110), (18.0, 109), (21.0, 1109)]))
+	print(r.solve())
+	print("Test2: {}".format(r.solve() == [(5.0, 10), (10.0, 110), (15.0, 1110), (18.0, 1109)]))
 
 if __name__ == '__main__':
 	test1()
