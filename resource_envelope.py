@@ -96,8 +96,8 @@ class SimpleTemporalProblemInstance:
         return True if self.shortest_paths() else False
 
 
-class ResourceEnvelopSolver:
-    """The solver class to solve the resource envelop problem. For the details of the approach, please refer to
+class ResourceEnvelopeSolver:
+    """The solver class to solve the resource envelope problem. For the details of the approach, please refer to
     T. K. Satish Kumar (2003). Incremental Computation of Resource-Envelopes in Producer-Consumer Models.
     Proceedings of the Ninth International Conference on Principles and Practice of Constraint Programming (CP-2003).
     """
@@ -173,18 +173,18 @@ class ResourceEnvelopSolver:
 
     def solve(self):
 
-        """Solves the resource envelop problem.
+        """Solves the resource envelope problem.
 
-        @return: the resource envelop. It is two list of tuples. Each tuple consists of a time step and the maximum/minimum production thereof.
+        @return: the resource envelope. It is two list of tuples. Each tuple consists of a time step and the maximum/minimum production thereof.
         """
 
         return self.upper(self.stp), self.lower()
 
     def upper(self, stp):
 
-        """Solves the resource envelop upper bound.
+        """Solves the resource envelope upper bound.
 
-        @return: the resource envelop. It is a list of tuples. Each tuple consists of a time step and the maximum production thereof.
+        @return: the resource envelope. It is a list of tuples. Each tuple consists of a time step and the maximum production thereof.
         """
 
         g, producers, consumers = self._build_bipartite_graph(stp)
@@ -223,9 +223,9 @@ class ResourceEnvelopSolver:
 
     def lower(self):
 
-        """Solves the resource envelop lower bound.
+        """Solves the resource envelope lower bound.
 
-        @return: the resource envelop. It is a list of tuples. Each tuple consists of a time step and the minimum production thereof.
+        @return: the resource envelope. It is a list of tuples. Each tuple consists of a time step and the minimum production thereof.
         """
 
         stp_l = copy.deepcopy(self.stp)
@@ -250,7 +250,7 @@ def test1():
     stp.add_constraint(x2, x3, 5, 10)
     stp.add_constraint(x3, x4, 2, 2)
 
-    r = ResourceEnvelopSolver(stp)
+    r = ResourceEnvelopeSolver(stp)
     print(r.solve())
     print("Test1: {}".format(r.solve()[0] == [(5.0, 5), (25.0, 0), (30.0, 15), (32.0, 17)]))
 
@@ -267,7 +267,7 @@ def test2():
     stp.add_constraint(x2, x4, 2, 4)
     stp.add_constraint(x3, x4, 5, 11)
 
-    r = ResourceEnvelopSolver(stp)
+    r = ResourceEnvelopeSolver(stp)
     print(r.solve())
     print("Test2: {}".format(r.solve()[0] == [(5.0, 10), (10.0, 110), (15.0, 1110), (18.0, 1109)]))
 
@@ -283,15 +283,14 @@ if __name__ == '__main__':
     stp.add_constraint(x1, x2, 5, 8)
     stp.add_constraint(x2, x4, 2, 4)
     stp.add_constraint(x3, x4, 5, 11)
-    r = ResourceEnvelopSolver(stp)
-    envelop = r.solve()
+    r = ResourceEnvelopeSolver(stp)
+    envelope = r.solve()
 
-    x1 = [0] + [i[0] for i in envelop[0]] + [30.0]
-    y1 = [0] + [i[1] for i in envelop[0]] + [envelop[0][-1][1]]
-    x2 = [0] + [i[0] for i in envelop[1]] + [30.0]
-    y2 = [0] + [i[1] for i in envelop[1]] + [envelop[1][-1][1]]
-    print(x1)
-    print(y1)
+    x1 = [0] + [i[0] for i in envelope[0]] + [30.0]
+    y1 = [0] + [i[1] for i in envelope[0]] + [envelope[0][-1][1]]
+    x2 = [0] + [i[0] for i in envelope[1]] + [30.0]
+    y2 = [0] + [i[1] for i in envelope[1]] + [envelope[1][-1][1]]
+
     plt.step(x1, y1, where='post')
     plt.step(x2, y2, where='post')
     plt.ylabel('PRODUCTION')
