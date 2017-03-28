@@ -125,13 +125,16 @@ class ResourceEnvelopeSolver:
         producers = set()
         consumers = set()
         for i, vertex in enumerate(stp.g.vs[1:], 2):
-            g.add_vertex(vertex["name"], production=vertex["production"])
+            g.add_vertex(vertex["name"])
             v = g.vs[i]
+            for key, value in vertex.attributes().iteritems():
+                v[key] = value
+            
             if v["production"] > 0:
-                g.add_edge(source, v, capacity=abs(v["production"]))
+                g.add_edge(source, v)
                 producers.add(v)
             elif v["production"] < 0:
-                g.add_edge(v, target, capacity=abs(v["production"]))
+                g.add_edge(v, target)
                 consumers.add(v)
 
         for p in producers:
@@ -171,16 +174,16 @@ class ResourceEnvelopeSolver:
         if last_t is not None:
             yield (last_t, vid_list)
 
-    def solve(self):
+    def solve(self, key):
 
         """Solves the resource envelope problem.
 
         @return: the resource envelope. It is two list of tuples. Each tuple consists of a time step and the maximum/minimum production thereof.
         """
+        stp = copy.deepcopy(self.stp)
+        return self.upper(stp, key), self.lower(stp, key)
 
-        return self.upper(self.stp), self.lower()
-
-    def upper(self, stp):
+    def upper(self, stp, key):
 
         """Solves the resource envelope upper bound.
 
@@ -188,6 +191,14 @@ class ResourceEnvelopeSolver:
         """
 
         g, producers, consumers = self._build_bipartite_graph(stp)
+        
+        for v in g.vs[2:]:
+            if v[key] > 0:
+                e = g.es[g.get_eid("source", v)]
+            elif v[key] < 0:
+                e = g.es[g.get_eid(v, "target")]
+            e["capacity"] = abs(v[key])
+
         vertices = consumers
         vertices.add(g.vs[0])
         vertices.add(g.vs[1])
@@ -195,10 +206,10 @@ class ResourceEnvelopeSolver:
         max_production_0 = 0
         for t, vids in self._create_timeline(stp):
             for vid in vids:
-                if stp.g.vs[vid]["production"] < 0:
-                    max_production_0 += g.vs[vid+1]["production"]
+                if stp.g.vs[vid][key] < 0:
+                    max_production_0 += g.vs[vid+1][key]
                     vertices.remove(g.vs[vid+1])
-                elif stp.g.vs[vid]["production"] > 0:
+                elif stp.g.vs[vid][key] > 0:
                     vertices.add(g.vs[vid+1])
             
             g_temp = g.subgraph(list(vertices))
@@ -215,25 +226,24 @@ class ResourceEnvelopeSolver:
             max_production_t = max_production_0
             for v in residual_graph.subcomponent(0, mode=igraph.OUT):
                 if v > 1:
-                    max_production_t += g_temp.vs[v]["production"]
+                    max_production_t += g_temp.vs[v][key]
 
             max_production.append((t, max_production_t))
 
         return max_production
 
-    def lower(self):
+    def lower(self, stp, key):
 
         """Solves the resource envelope lower bound.
 
         @return: the resource envelope. It is a list of tuples. Each tuple consists of a time step and the minimum production thereof.
         """
 
-        stp_l = copy.deepcopy(self.stp)
-        for v in stp_l.g.vs:
-            if v["production"] is not None:
-                v["production"] = -v["production"]
+        for v in stp.g.vs:
+            if v[key] is not None:
+                v[key] = -v[key]
         result = list()
-        for t in self.upper(stp_l):
+        for t in self.upper(stp, key):
             result.append((t[0], -t[1]))
         return result
 
@@ -273,8 +283,8 @@ def test2():
 
 if __name__ == '__main__':
     stp = SimpleTemporalProblemInstance()
-    x1 = stp.add_node("x1", production=10)
-    x2 = stp.add_node("x2", production=-10)
+    x1 = stp.add_node("x1", production=50)
+    x2 = stp.add_node("x2", production=-50)
     x3 = stp.add_node("x3", production=100)
     x4 = stp.add_node("x4", production=200)
 
@@ -284,7 +294,7 @@ if __name__ == '__main__':
     stp.add_constraint(x2, x4, 2, 4)
     stp.add_constraint(x3, x4, 5, 11)
     r = ResourceEnvelopeSolver(stp)
-    envelope = r.solve()
+    envelope = r.solve("production")
 
     x1 = [0] + [i[0] for i in envelope[0]] + [30.0]
     y1 = [0] + [i[1] for i in envelope[0]] + [envelope[0][-1][1]]
