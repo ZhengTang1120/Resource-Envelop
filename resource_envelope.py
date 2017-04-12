@@ -2,8 +2,9 @@ from __future__ import print_function
 import igraph
 import math, copy
 import matplotlib.pyplot as plt
-from scipy.optimize import linprog
 import numpy
+from gurobipy import Model, GurobiError, GRB
+from operator import mul
 
 
 
@@ -208,16 +209,6 @@ class ResourceEnvelopeSolver:
         max_production_0 = 0
         bound_index = 0
         for t, vids in timeline:
-
-            # if bound_index < len(lower_bounds):
-            #     if t >= lower_bounds[bound_index][0]:
-            #         lower_bound = lower_bounds[bound_index][2]
-
-            #     elif t > lower_bounds[bound_index][1]:
-            #         bound_index += 1
-            # else:
-            #     break
-
             for vid in vids:
                 if g.vs[vid-1][key] < 0:
                     max_production_0 += g.vs[vid-1][key]
@@ -228,20 +219,27 @@ class ResourceEnvelopeSolver:
             g_temp = g.subgraph(list(vertices))
 
             # Compute the maximum weighted independent set.
-            matrix_g_temp = numpy.zeros((len(g_temp.es), len(g_temp.vs)))
-            for eid, e in enumerate(g_temp.es):
-                matrix_g_temp[eid][e.source] = 1
-                matrix_g_temp[eid][e.target] = 1
-            matrix_b = numpy.ones((len(g_temp.es), 1))
-            matrix_c = numpy.empty(len(g_temp.vs))
-            for vid, v in enumerate(g_temp.vs):
-                matrix_c[vid] = -abs(v[key])
-            xs = linprog(matrix_c, matrix_g_temp, matrix_b, bounds=[(0, 1) for _ in g_temp.vs]).x
-            max_production_t = max_production_0
-            for vid, x in enumerate(xs):
-                if (x > 0.99 and g_temp.vs[vid][key] > 0) or (x < 0.01 and g_temp.vs[vid][key] < 0):
-                    max_production_t += g_temp.vs[vid][key]
+            try:
+                # Create a new model
+                m = Model()
 
+                variables = m.addVars(len(g_temp.vs), vtype=GRB.CONTINUOUS, ub=1.0, lb=0.0)
+                print(variables)
+                for e in g_temp.es:
+                    m.addConstr(variables[e.source]+variables[e.target] <= 1)
+                m.setObjective(sum(map(lambda x,y: x * abs(y), variables.values(), g_temp.vs[key])), GRB.MAXIMIZE)
+                m.optimize()
+                for v in m.getVars():
+                    print('%s %g' % (v.varName, v.x))
+
+                print('Obj: %g' % m.objVal)
+                max_production_t = max_production_0
+                for vid, x in enumerate(m.getVars()):
+                    if (x.x > 0.99 and g_temp.vs[vid][key] > 0) or (x.x < 0.01 and g_temp.vs[vid][key] < 0):
+                        max_production_t += g_temp.vs[vid][key]
+            except GurobiError:
+                print('Error code ' + str(e.errno) + ": " + str(e))
+            
             max_production.append((t, max_production_t))
 
         return max_production
@@ -269,7 +267,7 @@ if __name__ == '__main__':
     stp.add_constraint(stp.g.vs[0], x3, 10, 10)
     stp.add_constraint(x1, x2, 5, 8)
     stp.add_constraint(x2, x4, 2, 4)
-    stp.add_constraint(x3, x4, 5, 11)
+    stp.add_constraint(x3, x4, 5, 10)
     r = ResourceEnvelopeSolver(stp)
     envelope = r.solve("fuel", [])
     print (envelope)
@@ -282,15 +280,15 @@ if __name__ == '__main__':
     plt.step(x1, y1, where='post')
     plt.step(x2, y2, where='post')
 
-    envelope = r.solve("weapon", [])
+    # envelope = r.solve("weapon", [])
 
-    x1 = [0] + [i[0] for i in envelope[0]] + [30.0]
-    y1 = [0] + [i[1] for i in envelope[0]] + [envelope[0][-1][1]]
-    x2 = [0] + [i[0] for i in envelope[1]] + [30.0]
-    y2 = [0] + [i[1] for i in envelope[1]] + [envelope[1][-1][1]]
+    # x1 = [0] + [i[0] for i in envelope[0]] + [30.0]
+    # y1 = [0] + [i[1] for i in envelope[0]] + [envelope[0][-1][1]]
+    # x2 = [0] + [i[0] for i in envelope[1]] + [30.0]
+    # y2 = [0] + [i[1] for i in envelope[1]] + [envelope[1][-1][1]]
 
-    plt.step(x1, y1, where='post')
-    plt.step(x2, y2, where='post')
+    # plt.step(x1, y1, where='post')
+    # plt.step(x2, y2, where='post')
 
     plt.ylabel('PRODUCTION')
     plt.xlabel('TIME')
