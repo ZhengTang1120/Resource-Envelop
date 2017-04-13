@@ -110,7 +110,7 @@ class ResourceEnvelopeSolver:
 
         @param stp: the L{SimpleTemporalProblemInstance} object that specifies the simple temporal problem.
         """
-
+        self.stp = stp
         self.bi = self._build_bipartite_graph(stp)
         self.timeline = list(self._create_timeline(stp))
         stp_inverse = copy.copy(stp)
@@ -222,12 +222,20 @@ class ResourceEnvelopeSolver:
             try:
                 # Create a new model
                 m = Model()
-
-                variables = m.addVars(len(g_temp.vs), vtype=GRB.CONTINUOUS, ub=1.0, lb=0.0)
-                print(variables)
+                m.NumObj = 2
+                variables = m.addVars(range(len(g_temp.vs)), vtype=GRB.CONTINUOUS, ub=1.0, lb=0.0)
                 for e in g_temp.es:
                     m.addConstr(variables[e.source]+variables[e.target] <= 1)
-                m.setObjective(sum(map(lambda x,y: x * abs(y), variables.values(), g_temp.vs[key])), GRB.MAXIMIZE)
+                m.ModelSense = GRB.MAXIMIZE
+                m.setParam(GRB.Param.ObjNumber, 0)
+                m.ObjNPriority = 1
+                m.setAttr(GRB.Attr.ObjN, variables, map(abs, g_temp.vs[key]))
+
+                m.ModelSense = GRB.MAXIMIZE
+                m.setParam(GRB.Param.ObjNumber, 1)
+                m.ObjNPriority = 0
+                m.setAttr(GRB.Attr.ObjN, variables, [self.stp.shortest_path_pair("x0", x) + self.stp.shortest_path_pair(x, "x0") for x in g_temp.vs["name"]])
+
                 m.optimize()
                 for v in m.getVars():
                     print('%s %g' % (v.varName, v.x))
@@ -237,7 +245,7 @@ class ResourceEnvelopeSolver:
                 for vid, x in enumerate(m.getVars()):
                     if (x.x > 0.99 and g_temp.vs[vid][key] > 0) or (x.x < 0.01 and g_temp.vs[vid][key] < 0):
                         max_production_t += g_temp.vs[vid][key]
-            except GurobiError:
+            except GurobiError as e:
                 print('Error code ' + str(e.errno) + ": " + str(e))
             
             max_production.append((t, max_production_t))
