@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy
 from gurobipy import Model, GurobiError, GRB
 from operator import mul
+import sys
 
 
 
@@ -73,6 +74,7 @@ class SimpleTemporalProblemInstance:
             try:
                 self._shortest_paths = tuple(tuple(x) for x in self.g.shortest_paths(weights="weight"))
             except igraph._igraph.InternalError:
+                self._modified = True
                 return None
         return self._shortest_paths
 
@@ -110,16 +112,25 @@ class ResourceEnvelopeSolver:
 
         @param stp: the L{SimpleTemporalProblemInstance} object that specifies the simple temporal problem.
         """
-        self.stp = stp
+        self.stp = copy.deepcopy(stp)
         self.bi = self._build_bipartite_graph(stp)
         self.timeline = list(self._create_timeline(stp))
-        stp_inverse = copy.copy(stp)
+        stp_inverse = self._inverse_stp()
+        self.bi_inverse = self._build_bipartite_graph(stp_inverse)
+        self.timeline_inverse = list(self._create_timeline(stp_inverse))
+
+    def _inverse_stp(self):
+        """Inverses self.stp by negating all attributes of each node.
+
+        @return the inversed stp.
+        """
+
+        stp_inverse = copy.deepcopy(self.stp)
         for v in stp_inverse.g.vs:
             for key, value in v.attributes().iteritems():
                 if key != "name" and value is not None:
                     v[key] = -value
-        self.bi_inverse = self._build_bipartite_graph(stp_inverse)
-        self.timeline_inverse = list(self._create_timeline(stp_inverse))
+        return stp_inverse
 
     def _build_bipartite_graph(self, stp):
         """Builds a bipartite graph. The bipartite graph is necessary as an immediate step to solve the resource envelop problem.
@@ -179,20 +190,45 @@ class ResourceEnvelopeSolver:
         if last_t is not None:
             yield (last_t, vid_list)
 
-    def solve(self, key, lower_bounds):
-
+    def solve(self, key, lower_bound=None):
         """Solves the resource envelope problem.
 
         @return: the resource envelope. It is two list of tuples. Each tuple consists of a time step and the maximum/minimum production thereof.
         """
-        return self.upper(key, lower_bounds), self.lower(key, lower_bounds)
+        if lower_bound is not None:
+            g = self.bi_inverse[0]
+            producers = self.bi_inverse[1].copy()
+            consumers = self.bi_inverse[2].copy()
+            timeline = self.timeline_inverse
+            max_production_0 = 0
+            vertices = list()
+            for v in producers|consumers:
+                if (lower_bound[1] >= -self.stp.shortest_path_pair(g.vs[v]["name"], "x0") and
+                    lower_bound[0] <= self.stp.shortest_path_pair("x0", g.vs[v]["name"])):
+                    vertices.append(v)
 
-    def upper(self, key, lower_bounds, isupper=True):
+            g_temp = g.subgraph(vertices)
+            for vid, x in enumerate(self._upper_t(g_temp, key, max_production_0-lower_bound[2])):
+                if x > 0.99 and g_temp.vs[vid][key] < 0:
+                    self.stp.add_constraint(self.stp.g.vs[0], g_temp.vs[vid]["name"], up_bound=lower_bound[0])
+                elif (x < 0.01 and g_temp.vs[vid][key] > 0):
+                    self.stp.add_constraint(self.stp.g.vs[0], g_temp.vs[vid]["name"], lower_bound=lower_bound[1])
 
+            self.bi = self._build_bipartite_graph(self.stp)
+            self.timeline = list(self._create_timeline(self.stp))
+            stp_inverse = self._inverse_stp()
+            
+            self.bi_inverse = self._build_bipartite_graph(stp_inverse)
+            self.timeline_inverse = list(self._create_timeline(stp_inverse))
+
+        return self.upper(key), self.lower(key)
+
+    def upper(self, key, isupper=True):
         """Solves the resource envelope upper bound.
 
         @return: the resource envelope. It is a list of tuples. Each tuple consists of a time step and the maximum production thereof.
         """
+
         if isupper:
             g = self.bi[0]
             producers = self.bi[1].copy()
@@ -215,54 +251,66 @@ class ResourceEnvelopeSolver:
                     vertices.remove(vid-1)
                 elif g.vs[vid-1][key] > 0:
                     vertices.add(vid-1)
-            
+                
             g_temp = g.subgraph(list(vertices))
-
-            # Compute the maximum weighted independent set.
-            try:
-                # Create a new model
-                m = Model()
-                m.NumObj = 2
-                variables = m.addVars(range(len(g_temp.vs)), vtype=GRB.CONTINUOUS, ub=1.0, lb=0.0)
-                for e in g_temp.es:
-                    m.addConstr(variables[e.source]+variables[e.target] <= 1)
-                m.ModelSense = GRB.MAXIMIZE
-                m.setParam(GRB.Param.ObjNumber, 0)
-                m.ObjNPriority = 1
-                m.setAttr(GRB.Attr.ObjN, variables, map(abs, g_temp.vs[key]))
-
-                m.ModelSense = GRB.MAXIMIZE
-                m.setParam(GRB.Param.ObjNumber, 1)
-                m.ObjNPriority = 0
-                m.setAttr(GRB.Attr.ObjN, variables, [self.stp.shortest_path_pair("x0", x) + self.stp.shortest_path_pair(x, "x0") for x in g_temp.vs["name"]])
-
-                m.optimize()
-                for v in m.getVars():
-                    print('%s %g' % (v.varName, v.x))
-
-                print('Obj: %g' % m.objVal)
-                max_production_t = max_production_0
-                for vid, x in enumerate(m.getVars()):
-                    if (x.x > 0.99 and g_temp.vs[vid][key] > 0) or (x.x < 0.01 and g_temp.vs[vid][key] < 0):
-                        max_production_t += g_temp.vs[vid][key]
-            except GurobiError as e:
-                print('Error code ' + str(e.errno) + ": " + str(e))
-            
+                
+            max_production_t = max_production_0
+            for vid, x in enumerate(self._upper_t(g_temp, key)):
+                if (x > 0.99 and g_temp.vs[vid][key] > 0) or (x < 0.01 and g_temp.vs[vid][key] < 0):
+                    max_production_t += g_temp.vs[vid][key]
             max_production.append((t, max_production_t))
+
 
         return max_production
 
-    def lower(self, key, lower_bounds):
-
+    def lower(self, key):
         """Solves the resource envelope lower bound.
 
         @return: the resource envelope. It is a list of tuples. Each tuple consists of a time step and the minimum production thereof.
         """
 
         result = list()
-        for t in self.upper(key, lower_bounds, False):
+        for t in self.upper(key, False):
             result.append((t[0], -t[1]))
         return result
+
+    def _upper_t(self, g, key, lower=None):
+        """Solves the uppper bound at time t.
+
+        @param g: subgraph of bipartite graph at time t. 
+        @param key: the resource name.
+        @return: the uppper bound at t.
+        """
+
+        # Compute the maximum weighted independent set.
+        try:
+            # Create a new model
+            m = Model()
+            m.NumObj = 2
+            variables = m.addVars(range(len(g.vs)), vtype=GRB.CONTINUOUS, ub=1.0, lb=0.0)
+            for e in g.es:
+                m.addConstr(variables[e.source]+variables[e.target] <= 1)
+            if lower is not None:
+                m.addConstr(sum(variables[v] * g.vs[v][key] for v in xrange(len(g.vs))) <= lower)
+            m.ModelSense = GRB.MAXIMIZE
+            m.setParam(GRB.Param.ObjNumber, 0)
+            m.ObjNPriority = 1
+            m.setAttr(GRB.Attr.ObjN, variables, map(abs, g.vs[key]))
+
+            m.ModelSense = GRB.MAXIMIZE
+            m.setParam(GRB.Param.ObjNumber, 1)
+            m.ObjNPriority = 0
+            m.setAttr(GRB.Attr.ObjN, variables, [-self.stp.shortest_path_pair("x0", x) - self.stp.shortest_path_pair(x, "x0") for x in g.vs["name"]])
+
+            m.optimize()
+            for v in m.getVars():
+                print('%s %g' % (v.varName, v.x))
+
+            print('Obj: %g' % m.objVal)
+            
+            return [x.x for x in m.getVars()]
+        except GurobiError as e:
+            print('Error code ' + str(e.errno) + ": " + str(e))
 
 if __name__ == '__main__':
     stp = SimpleTemporalProblemInstance()
@@ -277,7 +325,7 @@ if __name__ == '__main__':
     stp.add_constraint(x2, x4, 2, 4)
     stp.add_constraint(x3, x4, 5, 10)
     r = ResourceEnvelopeSolver(stp)
-    envelope = r.solve("fuel", [])
+    envelope = r.solve("fuel", [6, 9, 10])
     print (envelope)
 
     x1 = [0] + [i[0] for i in envelope[0]] + [30.0]
