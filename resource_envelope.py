@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy
 from gurobipy import Model, GurobiError, GRB
 from operator import mul
+import itertools
 import sys
 
 
@@ -48,7 +49,7 @@ class SimpleTemporalProblemInstance:
             return name
 
     def add_constraint(self, event0, event1, lower_bound=None, up_bound=None):
-        """Adds a new constraint.
+        """Adds a new constraint: lower_bound <= time of event1 - time of event0 <= up_bound
 
         @param event0: the first event in the constraint.
         @param event1: the second event in the constraint.
@@ -99,6 +100,32 @@ class SimpleTemporalProblemInstance:
         """
 
         return True if self.shortest_paths() else False
+
+    def reduce(self, nodes):
+        """Reduces itself with only @nodes left."""
+
+        removed_nodes = [item for item in self.g.vs["name"] if item not in nodes and item != "x0"]
+        for node in removed_nodes:
+            sp = self.shortest_paths()
+            nid = self.nodes[node]
+            adjacent_vs = set()
+            for eid in self.g.incident(nid, mode=igraph.ALL):
+                e = self.g.es[eid]
+                adjacent_vs.add(e.source if e.source != nid else e.target)
+            for av0, av1 in itertools.product(adjacent_vs, repeat=2):
+                if av0 != av1:
+                    self.add_constraint(av0, av1, up_bound=sp[av0][av1])
+            self.g.delete_vertices(nid)
+            for key in self.nodes:
+                if self.nodes[key] > nid:
+                    self.nodes[key] -= 1
+
+        return self
+
+    def create_subproblem(self, nodes):
+        """Create a subproblem of @nodes."""
+
+        return copy.deepcopy(self).reduce(nodes)
 
 
 class ResourceEnvelopeSolver:
@@ -324,29 +351,33 @@ if __name__ == '__main__':
     stp.add_constraint(x1, x2, 5, 8)
     stp.add_constraint(x2, x4, 2, 4)
     stp.add_constraint(x3, x4, 5, 10)
-    r = ResourceEnvelopeSolver(stp)
-    envelope = r.solve("fuel", [6, 9, 10])
-    print (envelope)
 
-    x1 = [0] + [i[0] for i in envelope[0]] + [30.0]
-    y1 = [0] + [i[1] for i in envelope[0]] + [envelope[0][-1][1]]
-    x2 = [0] + [i[0] for i in envelope[1]] + [30.0]
-    y2 = [0] + [i[1] for i in envelope[1]] + [envelope[1][-1][1]]
-    plt.clf()
-    plt.step(x1, y1, where='post')
-    plt.step(x2, y2, where='post')
-
-    # envelope = r.solve("weapon", [])
+    sub = stp.create_subproblem([x3, x4])
+    print (sub.g)
+    print (stp.g)
+    # r = ResourceEnvelopeSolver(stp)
+    # envelope = r.solve("fuel", [6, 9, 10])
+    # print (envelope)
 
     # x1 = [0] + [i[0] for i in envelope[0]] + [30.0]
     # y1 = [0] + [i[1] for i in envelope[0]] + [envelope[0][-1][1]]
     # x2 = [0] + [i[0] for i in envelope[1]] + [30.0]
     # y2 = [0] + [i[1] for i in envelope[1]] + [envelope[1][-1][1]]
-
+    # plt.clf()
     # plt.step(x1, y1, where='post')
     # plt.step(x2, y2, where='post')
 
-    plt.ylabel('PRODUCTION')
-    plt.xlabel('TIME')
-    plt.xlim(0,30)
-    plt.show()
+    # # envelope = r.solve("weapon", [])
+
+    # # x1 = [0] + [i[0] for i in envelope[0]] + [30.0]
+    # # y1 = [0] + [i[1] for i in envelope[0]] + [envelope[0][-1][1]]
+    # # x2 = [0] + [i[0] for i in envelope[1]] + [30.0]
+    # # y2 = [0] + [i[1] for i in envelope[1]] + [envelope[1][-1][1]]
+
+    # # plt.step(x1, y1, where='post')
+    # # plt.step(x2, y2, where='post')
+
+    # plt.ylabel('PRODUCTION')
+    # plt.xlabel('TIME')
+    # plt.xlim(0,30)
+    # plt.show()
