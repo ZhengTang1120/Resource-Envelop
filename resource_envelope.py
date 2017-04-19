@@ -119,7 +119,6 @@ class SimpleTemporalProblemInstance:
             for key in self.nodes:
                 if self.nodes[key] > nid:
                     self.nodes[key] -= 1
-
         return self
 
     def create_subproblem(self, nodes):
@@ -233,12 +232,17 @@ class ResourceEnvelopeSolver:
                 if (lower_bound[1] >= -self.stp.shortest_path_pair(g.vs[v]["name"], "x0") and
                     lower_bound[0] <= self.stp.shortest_path_pair("x0", g.vs[v]["name"])):
                     vertices.append(v)
+                elif self.stp.shortest_path_pair("x0", g.vs[v]["name"])< lower_bound[0]:
+                    max_production_0 += g.vs[v][key]
+
 
             g_temp = g.subgraph(vertices)
-            for vid, x in enumerate(self._upper_t(g_temp, key, max_production_0-lower_bound[2])):
-                if x > 0.99 and g_temp.vs[vid][key] < 0:
+            print (max_production_0)
+
+            for vid, x in enumerate(self._upper_t(g_temp, key, -lower_bound[2]-max_production_0)):
+                if x > 1e-6 and g_temp.vs[vid][key] < 0:
                     self.stp.add_constraint(self.stp.g.vs[0], g_temp.vs[vid]["name"], up_bound=lower_bound[0])
-                elif (x < 0.01 and g_temp.vs[vid][key] > 0):
+                elif (x < 1-1e-6 and g_temp.vs[vid][key] > 0):
                     self.stp.add_constraint(self.stp.g.vs[0], g_temp.vs[vid]["name"], lower_bound=lower_bound[1])
 
             self.bi = self._build_bipartite_graph(self.stp)
@@ -308,7 +312,7 @@ class ResourceEnvelopeSolver:
         @param key: the resource name.
         @return: the uppper bound at t.
         """
-
+        print(lower)
         # Compute the maximum weighted independent set.
         try:
             # Create a new model
@@ -343,8 +347,8 @@ if __name__ == '__main__':
     stp = SimpleTemporalProblemInstance()
     x1 = stp.add_node("x1", production=1, weapon=0, fuel=50)
     x2 = stp.add_node("x2", production=-1, weapon=-5, fuel=-50)
-    x3 = stp.add_node("x3", production=1, weapon=10, fuel=150)
-    x4 = stp.add_node("x4", production=1, weapon=2, fuel=250)
+    x3 = stp.add_node("x3", production=1, weapon=10, fuel=250)
+    x4 = stp.add_node("x4", production=1, weapon=2, fuel=150)
 
     stp.add_constraint(stp.g.vs[0], x1, 5, 10)
     stp.add_constraint(stp.g.vs[0], x3, 10, 10)
@@ -352,20 +356,19 @@ if __name__ == '__main__':
     stp.add_constraint(x2, x4, 2, 4)
     stp.add_constraint(x3, x4, 5, 10)
 
-    sub = stp.create_subproblem([x3, x4])
-    print (sub.g)
-    print (stp.g)
-    # r = ResourceEnvelopeSolver(stp)
-    # envelope = r.solve("fuel", [6, 9, 10])
-    # print (envelope)
+    # sub = stp.create_subproblem([x3, x4])
+    
+    r = ResourceEnvelopeSolver(stp)
+    envelope = r.solve("fuel",[16,18,375])
+    print (envelope)
 
-    # x1 = [0] + [i[0] for i in envelope[0]] + [30.0]
-    # y1 = [0] + [i[1] for i in envelope[0]] + [envelope[0][-1][1]]
-    # x2 = [0] + [i[0] for i in envelope[1]] + [30.0]
-    # y2 = [0] + [i[1] for i in envelope[1]] + [envelope[1][-1][1]]
-    # plt.clf()
-    # plt.step(x1, y1, where='post')
-    # plt.step(x2, y2, where='post')
+    x1 = [0] + [i[0] for i in envelope[0]] + [30.0]
+    y1 = [0] + [i[1] for i in envelope[0]] + [envelope[0][-1][1]]
+    x2 = [0] + [i[0] for i in envelope[1]] + [30.0]
+    y2 = [0] + [i[1] for i in envelope[1]] + [envelope[1][-1][1]]
+    plt.clf()
+    plt.step(x1, y1, where='post')
+    plt.step(x2, y2, where='post')
 
     # # envelope = r.solve("weapon", [])
 
@@ -377,7 +380,7 @@ if __name__ == '__main__':
     # # plt.step(x1, y1, where='post')
     # # plt.step(x2, y2, where='post')
 
-    # plt.ylabel('PRODUCTION')
-    # plt.xlabel('TIME')
-    # plt.xlim(0,30)
-    # plt.show()
+    plt.ylabel('PRODUCTION')
+    plt.xlabel('TIME')
+    plt.xlim(0,30)
+    plt.show()
