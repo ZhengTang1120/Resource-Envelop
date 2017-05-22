@@ -1,7 +1,6 @@
 from __future__ import print_function
 import igraph
 import math, copy
-import matplotlib.pyplot as plt
 import numpy
 from gurobipy import Model, GurobiError, GRB
 from operator import mul
@@ -272,6 +271,7 @@ class ResourceEnvelopeSolver:
             timeline = self.timeline_inverse
 
         vertices = consumers
+        print(vertices)
         max_production = list()
         max_production_0 = 0
         bound_index = 0
@@ -279,6 +279,7 @@ class ResourceEnvelopeSolver:
             for vid in vids:
                 if g.vs[vid-1][key] < 0:
                     max_production_0 += g.vs[vid-1][key]
+                    print ("vid", vid)
                     vertices.remove(vid-1)
                 elif g.vs[vid-1][key] > 0:
                     vertices.add(vid-1)
@@ -343,44 +344,70 @@ class ResourceEnvelopeSolver:
         except GurobiError as e:
             print('Error code ' + str(e.errno) + ": " + str(e))
 
-if __name__ == '__main__':
+def run(j):
+    if j["constraint"] != []:
+        constraint = j["constraint"][1:]
+    else:
+        constraint = None
+    print (constraint)
     stp = SimpleTemporalProblemInstance()
-    x1 = stp.add_node("x1", production=1, weapon=0, fuel=50)
-    x2 = stp.add_node("x2", production=-1, weapon=-5, fuel=-50)
-    x3 = stp.add_node("x3", production=1, weapon=10, fuel=250)
-    x4 = stp.add_node("x4", production=1, weapon=2, fuel=150)
-
-    stp.add_constraint(stp.g.vs[0], x1, 5, 10)
-    stp.add_constraint(stp.g.vs[0], x3, 10, 10)
-    stp.add_constraint(x1, x2, 5, 8)
-    stp.add_constraint(x2, x4, 2, 4)
-    stp.add_constraint(x3, x4, 5, 10)
-
-    # sub = stp.create_subproblem([x3, x4])
+    x = dict()
+    nodes = j["nodes"]
+    for node in nodes:
+        if eval(node["title"])["name"] != "x0":
+            x[node["id"]] = stp.add_node(**eval(node["title"]))
+        else:
+            x[node["id"]] = "x0"
+    edges = j["edges"]
+    for edge in edges:
+        stp.add_constraint(x[edge["source"]["id"]], x[edge["target"]["id"]], eval(edge["title"])[0], eval(edge["title"])[1])
     
     r = ResourceEnvelopeSolver(stp)
-    envelope = r.solve("fuel",[16,18,375])
-    print (envelope)
+    envelope = r.solve("production")
+    for c in constraint:
+        envelope = r.solve("production", c)
+    if len(envelope[0]) == 0 or len(envelope[1]) == 0:
+        return [['x1'], ['data1'], ['x2'], ['data2']]
+    x1 = ['x1',0] + [i[0] for i in envelope[0]] + [30.0]
+    y1 = ['production_upper1',0] + [i[1] for i in envelope[0]] + [envelope[0][-1][1]]
+    x2 = ['x2',0] + [i[0] for i in envelope[1]] + [30.0]
+    y2 = ['production_lower1',0] + [i[1] for i in envelope[1]] + [envelope[1][-1][1]]
 
-    x1 = [0] + [i[0] for i in envelope[0]] + [30.0]
-    y1 = [0] + [i[1] for i in envelope[0]] + [envelope[0][-1][1]]
-    x2 = [0] + [i[0] for i in envelope[1]] + [30.0]
-    y2 = [0] + [i[1] for i in envelope[1]] + [envelope[1][-1][1]]
-    plt.clf()
-    plt.step(x1, y1, where='post')
-    plt.step(x2, y2, where='post')
+    # titles = dict()
+    # for e in r.stp.g.es:
+    #     k = r.stp.g.vs[e.source]["name"]+r.stp.g.vs[e.target]["name"] if r.stp.g.vs[e.source]["name"] > r.stp.g.vs[e.target]["name"] else r.stp.g.vs[e.target]["name"]+r.stp.g.vs[e.source]["name"]
+    #     if (k) not in titles:
+    #         titles[(k)] = [None, None]
+    #         if e["weight"] >= 0:
+    #             titles[(k)][1] = e["weight"]
+    #         else:
+    #             titles[(k)][0] = -e["weight"]
+    #     else:
+    #         if e["weight"] >= 0 and titles[(k)][1] is None:
+    #             titles[(k)][1] = e["weight"]
+    #         if e["weight"] >= 0 and titles[(k)][1] is not None:
+    #             if e["weight"] < titles[(k)][1]:
+    #                 titles[(k)][1] = e["weight"]
+    #         if e["weight"] < 0 and titles[(k)][0] is None:
+    #             titles[(k)][0] = -e["weight"]
+    #         if e["weight"] < 0 and titles[(k)][0] is not None:
+    #             if e["weight"] > titles[(k)][0]:
+    #                 titles[(k)][0] = -e["weight"]
+    # print(titles)
 
-    # # envelope = r.solve("weapon", [])
+    # for edge in j["edges"]:
+    #     k = x[edge["source"]["id"]]+x[edge["target"]["id"]] if x[edge["source"]["id"]]>x[edge["target"]["id"]] else x[edge["target"]["id"]]+x[edge["source"]["id"]]
+    #     edge["title"] = str(titles[k])
+    if constraint:
+        li = [x1, y1, x2, y2]
+        for i,c in enumerate(constraint):
+            xc = ['xc_'+str(i)] + c[:2]
+            yc = ['lower_bound_'+str(i)] + [c[2], c[2]]
+            li += [xc, yc]
+        print (li)
+        return li, j
+    else:
+        return [x1, y1, x2, y2], j
 
-    # # x1 = [0] + [i[0] for i in envelope[0]] + [30.0]
-    # # y1 = [0] + [i[1] for i in envelope[0]] + [envelope[0][-1][1]]
-    # # x2 = [0] + [i[0] for i in envelope[1]] + [30.0]
-    # # y2 = [0] + [i[1] for i in envelope[1]] + [envelope[1][-1][1]]
 
-    # # plt.step(x1, y1, where='post')
-    # # plt.step(x2, y2, where='post')
 
-    plt.ylabel('PRODUCTION')
-    plt.xlabel('TIME')
-    plt.xlim(0,30)
-    plt.show()

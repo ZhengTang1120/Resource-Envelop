@@ -1,0 +1,56 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+    <link rel="stylesheet" href="static/graph-creator.css" />
+    <link rel="stylesheet" type="text/css" href="https://rawgit.com/masayuki0812/c3/master/c3.css">
+  </head>
+
+  <body>
+    <div id="graph"></div>
+      <div id="toolbox">
+        <input type="file" id="hidden-file-upload"><input id="upload-input" type="image" title="upload graph" src="static/upload-icon.png" alt="upload graph"> <input type="image" id="download-input" title="download graph" src="static/download-icon.png" alt="download graph"> <input type="image" id="delete-graph" title="delete graph" src="static/trash-icon.png" alt="delete graph"><input id="change" type="image" title="upload graph" src="static/upload-icon.png" alt="upload graph">
+      </div>
+      <div id="chart"></div>
+      <div id="constraintModal">
+        <form>
+          <fieldset>
+            <label for="tp">Time Period Start</label>
+            <br/>
+            <input type="text" name="tp" id="tp">
+            <br/>
+            <label for="lb">Time Period End</label>
+            <br/>
+            <input type="text" name="lb" id="lb">
+            <br/>
+            <label for="rn">Required Lower Bound</label>
+            <br/>
+            <input type="text" name="rn" id="rn">
+          </fieldset>
+        </form>
+        <div id="users-contain" class="ui-widget">
+          <h1>Current Constraints:</h1>
+          <table id="users" class="ui-widget ui-widget-content">
+            <thead>
+              <tr class="ui-widget-header ">
+                <th>Time Period Start</th>
+                <th>Time Period End</th>
+                <th>Required Lower Bound</th>
+                <th>Delete</th>
+              </tr>
+            </thead>
+            <tbody>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    <script src="https://d3js.org/d3.v3.js" charset="utf-8"></script>
+    <script src="https://cdn.jsdelivr.net/filesaver.js/0.1/FileSaver.min.js"></script>
+    <scriptchart src="static/graph-creator.js"></script>
+    <script type="text/javascript" src="https://rawgit.com/masayuki0812/c3/master/c3.js"></script>
+    <script src="https://code.jquery.com/jquery-1.12.4.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+    <script src="static/graph-creator.js"></script>
+  </body>
+
+</html>
