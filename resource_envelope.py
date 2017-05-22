@@ -180,7 +180,7 @@ class ResourceEnvelopeSolver:
 
         for p in producers:
             for c in consumers:
-                if stp.shortest_path_pair(g.vs[p]["name"], g.vs[c]["name"]) < 0:
+                if stp.shortest_path_pair(g.vs[p]["name"], g.vs[c]["name"]) <= 0:
                     g.add_edge(p, c)
 
         return g, producers, consumers
